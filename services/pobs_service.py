@@ -690,20 +690,33 @@ def update_imei_data_realtime(pobs_path, master_path, template_path, session_id=
         # Update IMEI data
         log_message("[INFO] Updating IMEI data...")
         df_result = df_template.copy()
+        template_warnings = []
 
         # Create a mapping from master file
         master_mapping = dict(zip(df_master[master_imei_col].astype(str), df_master.index))
 
         updated_count = 0
+        empty_cell_count = 0
+
         for idx, row in df_pobs.iterrows():
             imei_value = str(row[pobs_imei_col])
             if imei_value in master_mapping:
                 master_idx = master_mapping[imei_value]
-                # Copy data from master to result
+                # Copy data from master to result and check for empty cells
                 for col in df_master.columns:
                     if col in df_result.columns:
-                        df_result.loc[updated_count, col] = df_master.loc[master_idx, col]
+                        value = df_master.loc[master_idx, col]
+                        df_result.loc[updated_count, col] = value
+                        # Check for empty cells
+                        if value is None or value == '' or (isinstance(value, str) and value.strip() == ''):
+                            empty_cell_count += 1
                 updated_count += 1
+
+        # Add warning if empty cells found
+        if empty_cell_count > 0:
+            warning_msg = f"⚠️ Warning: Found {empty_cell_count} empty cells in template columns. Please review the output file for missing data."
+            log_message(f"[WARNING] {warning_msg}")
+            template_warnings.append(warning_msg)
 
         log_message(f"[OK] Updated {updated_count} IMEI records")
 
@@ -723,12 +736,17 @@ def update_imei_data_realtime(pobs_path, master_path, template_path, session_id=
         df_result.to_excel(output_path, index=False)
         log_message(f"[OK] Updated file saved: {output_filename}")
 
+        result_message = f'Successfully updated {updated_count} IMEI records'
+        if template_warnings:
+            result_message += f'. {template_warnings[0]}'
+
         result = {
             'success': True,
-            'message': f'Successfully updated {updated_count} IMEI records',
+            'message': result_message,
             'records_updated': updated_count,
             'download_file': output_filename,
-            'processing_log': processing_log
+            'processing_log': processing_log,
+            'warnings': template_warnings
         }
 
         if session_id:
@@ -852,11 +870,14 @@ def update_imei_data(pobs_path, master_path, template_path, output_dir, custom_n
 
         # Generate IMEI HUB file if there are updated records
         imei_hub_path = None
+        template_warnings = []
         if righe_template:
             processing_log.append(f"[INFO] Generating IMEI HUB file for {len(righe_template)} updated records...")
             wb_template = load_workbook(template_path)
             ws_template = wb_template.active
 
+            # Check for empty cells in template columns and add warning
+            empty_cell_count = 0
             for valori in righe_template:
                 ws_template.append(valori)
                 # Format IMEI column (column 10) as number
@@ -867,6 +888,16 @@ def update_imei_data(pobs_path, master_path, template_path, output_dir, custom_n
                     imei_cell.number_format = numbers.FORMAT_NUMBER
                 except:
                     pass
+
+                # Check for empty cells in the row (columns A-J, indices 0-9)
+                for col_idx, val in enumerate(valori):
+                    if val is None or val == '' or (isinstance(val, str) and val.strip() == ''):
+                        empty_cell_count += 1
+
+            if empty_cell_count > 0:
+                warning_msg = f"⚠️ Warning: Found {empty_cell_count} empty cells in template columns. Please review the output file for missing data."
+                processing_log.append(f"[WARNING] {warning_msg}")
+                template_warnings.append(warning_msg)
 
             # Create IMEI HUB directory
             imei_hub_dir = os.path.join(output_dir, "IMEI HUB")
@@ -920,16 +951,21 @@ def update_imei_data(pobs_path, master_path, template_path, output_dir, custom_n
 
         processing_log.append("[OK] POBS IMEI data update operation completed successfully")
 
+        result_message = f'Successfully updated {aggiornati} records and generated IMEI HUB file.'
+        if template_warnings:
+            result_message += f' {template_warnings[0]}'
+
         return {
             'success': True,
-            'message': f'Successfully updated {aggiornati} records and generated IMEI HUB file.',
+            'message': result_message,
             'records_updated': aggiornati,
             'backup_file': backup_filename,
             'imei_hub_file': os.path.basename(imei_hub_path) if imei_hub_path else None,
             'updated_guids': aggiornati_id[:10],  # First 10 GUIDs
             'download_files': [os.path.basename(imei_hub_path)] if imei_hub_path else [],
             'log_file': log_filename,
-            'processing_log': processing_log
+            'processing_log': processing_log,
+            'warnings': template_warnings
         }
 
     except Exception as e:

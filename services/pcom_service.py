@@ -299,6 +299,23 @@ def process_pcom_files(noleggio_path, soho_path, output_dir, modelli_path, optio
 
         log(f"[INFO] Processed {records_processed} records")
 
+        # Check for empty cells in critical columns and warn user
+        empty_cell_warnings = []
+        empty_cell_count = 0
+        critical_columns = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]  # A through J
+
+        log("[INFO] Checking for empty cells in critical columns...")
+        for row in range(2, ws.max_row + 1):
+            for col in critical_columns:
+                cell_value = ws.cell(row=row, column=col).value
+                if cell_value is None or cell_value == '' or (isinstance(cell_value, str) and cell_value.strip() == ''):
+                    empty_cell_count += 1
+
+        if empty_cell_count > 0:
+            warning_msg = f"⚠️ Warning: Found {empty_cell_count} empty cells in critical columns (A-J). Please review the output file for missing data."
+            log(f"[WARNING] {warning_msg}")
+            empty_cell_warnings.append(warning_msg)
+
         # Delete unnecessary columns if requested
         if options.get("clean", False):
             log("[INFO] Cleaning unnecessary columns...")
@@ -334,13 +351,18 @@ def process_pcom_files(noleggio_path, soho_path, output_dir, modelli_path, optio
 
         log("[INFO] PCOM processing completed successfully")
 
+        result_message = f'Successfully processed {records_processed} records'
+        if empty_cell_warnings:
+            result_message += f'. {empty_cell_warnings[0]}'
+
         return {
             'success': True,
-            'message': f'Successfully processed {records_processed} records',
+            'message': result_message,
             'records_processed': records_processed,
             'output_file': output_filename,
             'processing_log': processing_log,
-            'download_file': output_filename
+            'download_file': output_filename,
+            'warnings': empty_cell_warnings
         }
 
     except Exception as e:
@@ -507,6 +529,23 @@ def process_pcom_files_realtime(noleggio_path, soho_path, output_dir, modelli_pa
 
         log_message(f"Completed processing {records_processed} records")
 
+        # Check for empty cells in critical columns and warn user
+        empty_cell_warnings = []
+        empty_cell_count = 0
+        critical_columns = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']
+
+        log_message("Checking for empty cells in critical columns...")
+        for row in range(2, len(noleggio_data) + 2):
+            for col in critical_columns:
+                cell_value = ws_noleggio[f'{col}{row}'].value
+                if cell_value is None or cell_value == '' or (isinstance(cell_value, str) and cell_value.strip() == ''):
+                    empty_cell_count += 1
+
+        if empty_cell_count > 0:
+            warning_msg = f"⚠️ Warning: Found {empty_cell_count} empty cells in critical columns (A-J). Please review the output file for missing data."
+            log_message(f"[WARNING] {warning_msg}")
+            empty_cell_warnings.append(warning_msg)
+
         # Generate output filename
         if custom_name:
             output_filename = custom_name
@@ -521,13 +560,18 @@ def process_pcom_files_realtime(noleggio_path, soho_path, output_dir, modelli_pa
         wb_noleggio.save(output_path)
         log_message("PCOM file saved successfully")
 
+        result_message = f'Successfully processed {records_processed} records'
+        if empty_cell_warnings:
+            result_message += f'. {empty_cell_warnings[0]}'
+
         result = {
             'success': True,
-            'message': f'Successfully processed {records_processed} records',
+            'message': result_message,
             'records_processed': records_processed,
             'output_file': output_filename,
             'processing_log': processing_log,
-            'download_file': output_filename
+            'download_file': output_filename,
+            'warnings': empty_cell_warnings
         }
 
         # Store result and complete session for real-time operations
