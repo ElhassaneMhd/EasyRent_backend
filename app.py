@@ -15,6 +15,7 @@ app = Flask(__name__)
 CORS(app, origins=[
     "https://easyrentwebapp.netlify.app",
     "http://localhost:3000",
+    "http://localhost:1420",
     "http://127.0.0.1:3000"
 ])
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
