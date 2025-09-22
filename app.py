@@ -12,7 +12,11 @@ from services.logger_service import operation_logger
 from services.realtime_logger import realtime_logger
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=[
+    "https://easyrentwebapp.netlify.app",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000"
+])
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
 
 # Ensure directories exist
