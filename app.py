@@ -16,7 +16,7 @@ CORS(app, origins=[
     "https://easyrentwebapp.netlify.app",
     "http://localhost:3000",
     "http://localhost:1420",
-    "http://tauri.localhost:1420",
+    "http://tauri.localhost",
     "http://127.0.0.1:3000"
 ])
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
