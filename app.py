@@ -1,0 +1,544 @@
+from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
+import os
+import json
+import threading
+from werkzeug.utils import secure_filename
+from werkzeug.datastructures import FileStorage
+from services.pobs_service import verify_new_records, add_new_records, update_imei_data, verify_new_records_realtime, add_new_records_realtime, update_imei_data_realtime
+from services.pcom_service import process_pcom_files, process_pcom_with_pobs, process_pcom_files_realtime, process_pcom_with_pobs_realtime
+from services.tracking_service import generate_upload_gsped, update_tracking_data, generate_upload_gsped_realtime, update_tracking_data_realtime
+from services.logger_service import operation_logger
+from services.realtime_logger import realtime_logger
+
+app = Flask(__name__)
+CORS(app)
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
+
+# Ensure directories exist
+os.makedirs('uploads', exist_ok=True)
+os.makedirs('outputs', exist_ok=True)
+
+def save_uploaded_file(file: FileStorage, folder: str) -> str:
+    """Save uploaded file and return the path"""
+    if file and file.filename:
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(folder, filename)
+        file.save(filepath)
+        return filepath
+    return None
+
+# ============================================================================
+# POBS Module Routes
+# ============================================================================
+
+@app.route('/api/pobs/verify-new', methods=['POST'])
+def pobs_verify_new():
+    """Verify new records between Noleggio and POBS files"""
+    try:
+        noleggio_file = request.files.get('noleggio')
+        pobs_file = request.files.get('pobs')
+
+        if not noleggio_file or not pobs_file:
+            return jsonify({'error': 'Both Noleggio and POBS files are required'}), 400
+
+        # Save files
+        noleggio_path = save_uploaded_file(noleggio_file, 'uploads')
+        pobs_path = save_uploaded_file(pobs_file, 'uploads')
+
+        # Process files and return complete result with logs
+        result = verify_new_records(noleggio_path, pobs_path)
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/pobs/add-new', methods=['POST'])
+def pobs_add_new():
+    """Add new records to POBS file"""
+    try:
+        noleggio_file = request.files.get('noleggio')
+        pobs_file = request.files.get('pobs')
+
+        if not noleggio_file or not pobs_file:
+            return jsonify({'error': 'Both files are required'}), 400
+
+        # Save files
+        noleggio_path = save_uploaded_file(noleggio_file, 'uploads')
+        pobs_path = save_uploaded_file(pobs_file, 'uploads')
+
+        # Process files and return complete result with logs
+        result = add_new_records(noleggio_path, pobs_path, 'outputs')
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/pobs/update-imei', methods=['POST'])
+def pobs_update_imei():
+    """Update IMEI data from masterfile with custom naming"""
+    try:
+        pobs_file = request.files.get('pobs')
+        master_file = request.files.get('masterfile')
+        template_file = request.files.get('template')
+        custom_name = request.form.get('custom_name')
+
+        if not all([pobs_file, master_file, template_file]):
+            return jsonify({'error': 'All three files are required'}), 400
+
+        # Save files
+        pobs_path = save_uploaded_file(pobs_file, 'uploads')
+        master_path = save_uploaded_file(master_file, 'uploads')
+        template_path = save_uploaded_file(template_file, 'uploads')
+
+        # Process files and return complete result with logs
+        result = update_imei_data(pobs_path, master_path, template_path, 'outputs', custom_name)
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# PCOM Module Routes
+# ============================================================================
+
+@app.route('/api/pcom/process', methods=['POST'])
+def pcom_process():
+    """Process PCOM files with optional POBS update"""
+    try:
+        noleggio_file = request.files.get('noleggio')
+        soho_file = request.files.get('soho')
+        modelli_file = request.files.get('modelli')
+        pobs_file = request.files.get('pobs')  # Optional POBS file
+
+        if not noleggio_file or not soho_file:
+            return jsonify({'error': 'Noleggio and SOHO files are required'}), 400
+
+        # Get options and custom names from request
+        options_str = request.form.get('options', '{}')
+        options = json.loads(options_str)
+        custom_names_str = request.form.get('custom_names', '{}')
+        custom_names = json.loads(custom_names_str)
+
+        # Save files
+        noleggio_path = save_uploaded_file(noleggio_file, 'uploads')
+        soho_path = save_uploaded_file(soho_file, 'uploads')
+        modelli_path = save_uploaded_file(modelli_file, 'uploads') if modelli_file else None
+        pobs_path = save_uploaded_file(pobs_file, 'uploads') if pobs_file else None
+
+        # Process files and return complete result
+        if pobs_path:
+            result = process_pcom_with_pobs(noleggio_path, soho_path, pobs_path, 'outputs', modelli_path, options, custom_names)
+        else:
+            result = process_pcom_files(noleggio_path, soho_path, 'outputs', modelli_path, options, custom_names.get('pcom') if custom_names else None)
+
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# Tracking Module Routes
+# ============================================================================
+
+@app.route('/api/tracking/generate-gsped', methods=['POST'])
+def tracking_generate_gsped():
+    """Generate Upload Gsped file"""
+    try:
+        pobs_file = request.files.get('pobs')
+        masterfile_file = request.files.get('masterfile')
+
+        if not pobs_file or not masterfile_file:
+            return jsonify({'error': 'Both POBS and Masterfile are required'}), 400
+
+        # Save files
+        pobs_path = save_uploaded_file(pobs_file, 'uploads')
+        masterfile_path = save_uploaded_file(masterfile_file, 'uploads')
+
+        # Process files and return complete result
+        result = generate_upload_gsped(pobs_path, masterfile_path, 'outputs')
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/tracking/update-tracking', methods=['POST'])
+def tracking_update():
+    """Update tracking data in POBS with masterfile integration"""
+    try:
+        pobs_file = request.files.get('pobs')
+        trasporti_file = request.files.get('trasporti')
+        masterfile_file = request.files.get('masterfile')
+        custom_name = request.form.get('custom_name')
+
+        if not pobs_file or not trasporti_file:
+            return jsonify({'error': 'Both POBS and Trasporti files are required'}), 400
+
+        # Save files
+        pobs_path = save_uploaded_file(pobs_file, 'uploads')
+        trasporti_path = save_uploaded_file(trasporti_file, 'uploads')
+        masterfile_path = save_uploaded_file(masterfile_file, 'uploads') if masterfile_file else None
+
+        # Process files and return complete result
+        result = update_tracking_data(pobs_path, trasporti_path, masterfile_path, 'outputs', custom_name)
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# File Download Routes
+# ============================================================================
+
+@app.route('/api/download/<filename>')
+def download_file(filename):
+    """Download generated files with enhanced subdirectory search"""
+    try:
+        # Define priority search order for subdirectories
+        search_dirs = [
+            'outputs',  # Direct outputs folder
+            'outputs/PCOM',  # PCOM files
+            'outputs/POBS',  # POBS files
+            'outputs/IMEI HUB',  # IMEI HUB files
+            'outputs/GSPED',  # GSPED files
+            'outputs/TRACKING RADAR',  # Tracking radar files
+            'outputs/POBS CON TRACKING',  # POBS with tracking
+            'outputs/Backup',  # Backup files
+            'outputs/backup_POBS'  # POBS backup files
+        ]
+
+        # First try priority directories
+        for search_dir in search_dirs:
+            file_path = os.path.join(search_dir, filename)
+            if os.path.exists(file_path):
+                return send_file(file_path, as_attachment=True)
+
+        # If not found, do a comprehensive search in all subdirectories
+        for root, dirs, files in os.walk('outputs'):
+            if filename in files:
+                file_path = os.path.join(root, filename)
+                return send_file(file_path, as_attachment=True)
+
+        return jsonify({'error': f'File "{filename}" not found in any output directory'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# Historic Files Management
+# ============================================================================
+
+@app.route('/api/historic/files')
+def get_historic_files():
+    """Get all historic files organized by feature type"""
+    try:
+        # Define folder mappings
+        folder_mappings = {
+            'POBS': ['outputs/POBS', 'outputs/backup_POBS'],
+            'PCOM': ['outputs/PCOM'],
+            'IMEI_HUB': ['outputs/IMEI HUB'],
+            'GSPED': ['outputs/GSPED'],
+            'TRACKING_RADAR': ['outputs/TRACKING RADAR'],
+            'POBS_TRACKING': ['outputs/POBS CON TRACKING'],
+            'BACKUP': ['outputs/Backup']
+        }
+
+        result = {}
+
+        for feature, folders in folder_mappings.items():
+            files = []
+            for folder in folders:
+                if os.path.exists(folder):
+                    for filename in os.listdir(folder):
+                        file_path = os.path.join(folder, filename)
+                        if os.path.isfile(file_path):
+                            stat = os.stat(file_path)
+                            files.append({
+                                'name': filename,
+                                'path': folder,
+                                'size': stat.st_size,
+                                'created': stat.st_ctime,
+                                'modified': stat.st_mtime,
+                                'extension': os.path.splitext(filename)[1],
+                                'download_url': f'/api/download/{filename}',
+                                'preview_url': f'/api/historic/preview/{filename}' if filename.lower().endswith(('.xlsx', '.xls', '.csv')) else None
+                            })
+
+            # Sort by modification time (newest first)
+            files.sort(key=lambda x: x['modified'], reverse=True)
+            result[feature] = files
+
+        return jsonify({
+            'success': True,
+            'data': result
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/historic/preview/<filename>')
+def preview_file(filename):
+    """Preview file content (supports both small preview and expanded view)"""
+    try:
+        # Search for file in all output directories
+        search_dirs = [
+            'outputs/PCOM', 'outputs/POBS', 'outputs/IMEI HUB',
+            'outputs/GSPED', 'outputs/TRACKING RADAR',
+            'outputs/POBS CON TRACKING', 'outputs/Backup', 'outputs/backup_POBS'
+        ]
+
+        file_path = None
+        for search_dir in search_dirs:
+            potential_path = os.path.join(search_dir, filename)
+            if os.path.exists(potential_path):
+                file_path = potential_path
+                break
+
+        if not file_path:
+            return jsonify({'error': f'File "{filename}" not found'}), 404
+
+        # Check file extension
+        ext = os.path.splitext(filename)[1].lower()
+
+        # Get limit from query parameter (default 10 for small preview, more for expanded)
+        limit = request.args.get('limit', '10', type=int)
+        limit = min(limit, 1000)  # Cap at 1000 rows for performance
+
+        if ext in ['.xlsx', '.xls']:
+            import pandas as pd
+            df = pd.read_excel(file_path, dtype=str)
+            preview_data = df.head(limit).fillna('').to_dict('records')
+            columns = list(df.columns)
+
+            return jsonify({
+                'success': True,
+                'data': {
+                    'columns': columns,
+                    'rows': preview_data,
+                    'total_rows': len(df),
+                    'filename': filename,
+                    'type': 'excel',
+                    'preview_limit': limit
+                }
+            })
+
+        elif ext == '.csv':
+            import pandas as pd
+            df = pd.read_csv(file_path, dtype=str)
+            preview_data = df.head(limit).fillna('').to_dict('records')
+            columns = list(df.columns)
+
+            return jsonify({
+                'success': True,
+                'data': {
+                    'columns': columns,
+                    'rows': preview_data,
+                    'total_rows': len(df),
+                    'filename': filename,
+                    'type': 'csv',
+                    'preview_limit': limit
+                }
+            })
+
+        else:
+            return jsonify({'error': 'File type not supported for preview'}), 400
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/historic/delete/<filename>', methods=['DELETE'])
+def delete_historic_file(filename):
+    """Delete a historic file"""
+    try:
+        # Search for file in all output directories
+        search_dirs = [
+            'outputs/PCOM', 'outputs/POBS', 'outputs/IMEI HUB',
+            'outputs/GSPED', 'outputs/TRACKING RADAR',
+            'outputs/POBS CON TRACKING', 'outputs/Backup', 'outputs/backup_POBS'
+        ]
+
+        file_path = None
+        for search_dir in search_dirs:
+            potential_path = os.path.join(search_dir, filename)
+            if os.path.exists(potential_path):
+                file_path = potential_path
+                break
+
+        if not file_path:
+            return jsonify({'error': f'File "{filename}" not found'}), 404
+
+        os.remove(file_path)
+        return jsonify({
+            'success': True,
+            'message': f'File "{filename}" deleted successfully'
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# Health Check
+# ============================================================================
+
+# ============================================================================
+# Logging System
+# ============================================================================
+
+@app.route('/api/logs')
+def get_operation_logs():
+    """Get recent operation logs"""
+    try:
+        operation_type = request.args.get('type', None)  # POBS, PCOM, TRACKING, etc.
+        limit = int(request.args.get('limit', 20))
+
+        logs = operation_logger.get_operation_logs(operation_type, limit)
+        return jsonify({
+            'success': True,
+            'logs': logs,
+            'total': len(logs)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/logs/<log_filename>')
+def get_log_file(log_filename):
+    """Download a specific log file"""
+    try:
+        # Ensure the filename is secure
+        log_filename = secure_filename(log_filename)
+        log_path = os.path.join('outputs', 'LOGS', log_filename)
+
+        if os.path.exists(log_path):
+            return send_file(log_path, as_attachment=True)
+        else:
+            return jsonify({'error': 'Log file not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/logs/cleanup', methods=['POST'])
+def cleanup_logs():
+    """Clean up old log files"""
+    try:
+        days_to_keep = int(request.json.get('days', 30))
+        cleaned_count = operation_logger.cleanup_old_logs(days_to_keep)
+
+        return jsonify({
+            'success': True,
+            'message': f'Cleaned up {cleaned_count} old log files',
+            'files_removed': cleaned_count
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# Real-time Logging with Server-Sent Events (SSE)
+# ============================================================================
+
+@app.route('/api/logs/create-session', methods=['POST'])
+def create_log_session():
+    """Create a new real-time logging session"""
+    try:
+        session_id = realtime_logger.create_session()
+        return jsonify({
+            'success': True,
+            'session_id': session_id
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/logs/stream/<session_id>')
+def stream_logs(session_id):
+    """Stream logs for a specific session via Server-Sent Events"""
+    try:
+        return realtime_logger.get_sse_response(session_id)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/logs/result/<session_id>')
+def get_session_result(session_id):
+    """Get the final result for a completed session"""
+    try:
+        result = realtime_logger.get_result(session_id)
+        if result is None:
+            return jsonify({'error': 'No result found for this session or session not completed'}), 404
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/logs/sessions', methods=['GET'])
+def get_active_sessions():
+    """Get list of active sessions"""
+    try:
+        sessions = realtime_logger.get_active_sessions()
+        return jsonify({
+            'success': True,
+            'sessions': sessions,
+            'count': len(sessions)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/logs/cleanup/<session_id>', methods=['DELETE'])
+def cleanup_session(session_id):
+    """Manually cleanup a specific session"""
+    try:
+        realtime_logger.cleanup_session(session_id)
+        return jsonify({
+            'success': True,
+            'message': f'Session {session_id} cleaned up successfully'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/logs/cleanup', methods=['DELETE'])
+def cleanup_all_sessions():
+    """Emergency cleanup of all sessions"""
+    try:
+        realtime_logger.cleanup_all_sessions()
+        return jsonify({
+            'success': True,
+            'message': 'All sessions cleaned up successfully'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# Health Check
+# ============================================================================
+
+@app.route('/api/health')
+def health_check():
+    """Health check endpoint"""
+    return jsonify({'status': 'healthy', 'service': 'EasyRent Backend'})
+
+@app.route('/api/debug/file-columns', methods=['POST'])
+def debug_file_columns():
+    """Debug endpoint to check file columns"""
+    try:
+        file = request.files.get('file')
+        if not file:
+            return jsonify({'error': 'No file provided'}), 400
+
+        # Save file temporarily
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as tmp:
+            file.save(tmp.name)
+
+            # Read file and get columns
+            import pandas as pd
+            df = pd.read_excel(tmp.name, dtype=str)
+
+            # Clean up
+            os.unlink(tmp.name)
+
+            return jsonify({
+                'success': True,
+                'columns': list(df.columns),
+                'shape': df.shape,
+                'sample_data': df.head(3).to_dict('records') if len(df) > 0 else []
+            })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=5000)

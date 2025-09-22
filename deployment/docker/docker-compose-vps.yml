@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  easyrent-backend:
+    build:
+      context: ../../
+      dockerfile: deployment/docker/Dockerfile.backend
+    ports:
+      - "8082:5000"  # External:Internal
+    environment:
+      - FLASK_ENV=production
+      - FLASK_DEBUG=false
+    volumes:
+      - easyrent_uploads:/app/uploads
+      - easyrent_outputs:/app/outputs
+    restart: unless-stopped
+    container_name: easyrent-backend
+
+  easyrent-frontend:
+    build:
+      context: ../../
+      dockerfile: deployment/docker/Dockerfile.frontend
+    ports:
+      - "8081:80"    # External:Internal
+    depends_on:
+      - easyrent-backend
+    restart: unless-stopped
+    container_name: easyrent-frontend
+
+volumes:
+  easyrent_uploads:
+  easyrent_outputs:
