@@ -1,0 +1,15 @@
+[Unit]
+Description=EasyRent Backend API
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/easyrent
+Environment="PATH=/var/www/easyrent/venv/bin"
+ExecStart=/var/www/easyrent/venv/bin/gunicorn --workers 3 --bind 127.0.0.1:5001 --timeout 300 --log-level info --access-logfile /var/log/easyrent/access.log --error-logfile /var/log/easyrent/error.log app:app
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
