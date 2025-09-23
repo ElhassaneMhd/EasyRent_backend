@@ -153,6 +153,7 @@ def pcom_process():
         else:
             result = process_pcom_files(noleggio_path, soho_path, 'outputs', modelli_path, options, custom_names.get('pcom') if custom_names else None)
 
+
         return jsonify(result)
 
     except Exception as e:

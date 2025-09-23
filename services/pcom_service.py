@@ -77,6 +77,28 @@ def process_pcom_with_pobs(noleggio_path, soho_path, pobs_path, output_dir, mode
                 }
             results['pobs'] = pobs_result
             results['message'] = f"PCOM and POBS processing completed. PCOM: {pcom_result.get('records_processed', 0)} records, POBS: {pobs_result.get('records_added', 0)} records added"
+
+            # Include download files from both PCOM and POBS
+            download_files = []
+
+            # Get PCOM download files
+            if pcom_result.get('download_file'):
+                download_files.append(pcom_result.get('download_file'))
+            if pcom_result.get('download_files'):
+                download_files.extend(pcom_result.get('download_files'))
+
+            # Get POBS download files
+            if pobs_result.get('download_file'):
+                download_files.append(pobs_result.get('download_file'))
+            if pobs_result.get('download_files'):
+                download_files.extend(pobs_result.get('download_files'))
+
+            # Set download files at top level for frontend
+            if download_files:
+                if len(download_files) == 1:
+                    results['download_file'] = download_files[0]
+                else:
+                    results['download_files'] = download_files
         else:
             results['message'] = f"PCOM processing completed. {pcom_result.get('records_processed', 0)} records processed"
             results['records_processed'] = pcom_result.get('records_processed', 0)
@@ -302,6 +324,7 @@ def process_pcom_files(noleggio_path, soho_path, output_dir, modelli_path, optio
         # Check for empty cells in critical columns and warn user
         empty_cell_warnings = []
         empty_cell_count = 0
+        template_empty_count = 0
         critical_columns = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]  # A through J
 
         log("[INFO] Checking for empty cells in critical columns...")
@@ -310,6 +333,20 @@ def process_pcom_files(noleggio_path, soho_path, output_dir, modelli_path, optio
                 cell_value = ws.cell(row=row, column=col).value
                 if cell_value is None or cell_value == '' or (isinstance(cell_value, str) and cell_value.strip() == ''):
                     empty_cell_count += 1
+
+        # Specific check for template/model column if modelli option was used
+        if options.get("modelli", False):
+            log("[INFO] Checking for empty cells in Template/Model column...")
+            modello_col = last_col + 1  # The Modello column position
+            for row in range(2, ws.max_row + 1):
+                modello_value = ws.cell(row=row, column=modello_col).value
+                if modello_value is None or modello_value == '' or (isinstance(modello_value, str) and modello_value.strip() == ''):
+                    template_empty_count += 1
+
+            if template_empty_count > 0:
+                template_warning = f"⚠️ Critical Warning: Found {template_empty_count} empty cells in Template/Model column. These records may have missing device information that could affect order processing."
+                log(f"[WARNING] {template_warning}")
+                empty_cell_warnings.append(template_warning)
 
         if empty_cell_count > 0:
             warning_msg = f"⚠️ Warning: Found {empty_cell_count} empty cells in critical columns (A-J). Please review the output file for missing data."
@@ -431,6 +468,39 @@ def process_pcom_with_pobs_realtime(noleggio_path, soho_path, pobs_path, output_
             results['pobs'] = pobs_result
             log_message(f"[OK] POBS processing completed: {pobs_result.get('records_added', 0)} records added")
             results['message'] = f"PCOM and POBS processing completed. PCOM: {pcom_result.get('records_processed', 0)} records, POBS: {pobs_result.get('records_added', 0)} records added"
+
+            # Include download files from both PCOM and POBS
+            download_files = []
+
+            # Get PCOM download files
+            if pcom_result.get('download_file'):
+                download_files.append(pcom_result.get('download_file'))
+            if pcom_result.get('download_files'):
+                download_files.extend(pcom_result.get('download_files'))
+
+            # Get POBS download files
+            if pobs_result.get('download_file'):
+                download_files.append(pobs_result.get('download_file'))
+            if pobs_result.get('download_files'):
+                download_files.extend(pobs_result.get('download_files'))
+
+            # Set download files in results
+            if download_files:
+                if len(download_files) == 1:
+                    results['download_file'] = download_files[0]
+                else:
+                    results['download_files'] = download_files
+
+            print(f"DEBUG: Combined download_files collected: {download_files}")
+
+            # Include warnings from both processes
+            warnings = []
+            if pcom_result.get('warnings'):
+                warnings.extend(pcom_result.get('warnings'))
+            if pobs_result.get('warnings'):
+                warnings.extend(pobs_result.get('warnings'))
+            if warnings:
+                results['warnings'] = warnings
         else:
             results['message'] = f"PCOM processing completed. {pcom_result.get('records_processed', 0)} records processed"
             results['records_processed'] = pcom_result.get('records_processed', 0)
@@ -439,6 +509,12 @@ def process_pcom_with_pobs_realtime(noleggio_path, soho_path, pobs_path, output_
             results['processing_log'] = processing_log
 
         log_message("[OK] All processing completed successfully")
+
+        # Debug logging to see what we're returning
+        print(f"DEBUG PCOM: Final result keys: {list(results.keys())}")
+        print(f"DEBUG PCOM: download_file: {results.get('download_file')}")
+        print(f"DEBUG PCOM: download_files: {results.get('download_files')}")
+        print(f"DEBUG PCOM: message: {results.get('message')}")
 
         if session_id:
             realtime_logger.store_result(session_id, results)
