@@ -74,12 +74,29 @@ def generate_upload_gsped(pobs_path, masterfile_path, output_dir):
         # Load template for headers
         processing_log.append("[INFO] Loading template headers...")
         try:
-            template_wb = xlrd.open_workbook("Gsped_template_excel.xls")
-            template_sheet = template_wb.sheet_by_index(0)
-            headers = template_sheet.row_values(0)
-            processing_log.append("[OK] Template headers loaded from file")
+            # Try to find template file in multiple locations
+            template_paths = [
+                "Gsped_template_excel.xls",  # Current directory
+                "../Gsped_template_excel.xls",  # Parent directory
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "Gsped_template_excel.xls")  # Project root
+            ]
+
+            template_wb = None
+            for template_path in template_paths:
+                try:
+                    template_wb = xlrd.open_workbook(template_path)
+                    break
+                except FileNotFoundError:
+                    continue
+
+            if template_wb:
+                template_sheet = template_wb.sheet_by_index(0)
+                headers = template_sheet.row_values(0)
+                processing_log.append("[OK] Template headers loaded from file")
+            else:
+                raise FileNotFoundError("Template not found in any location")
         except FileNotFoundError:
-            # Default headers if template not found
+            # Default headers if template not found - Updated to match correct format
             headers = [
                 "CD_SOCIETA", "CD_DEPOSITO", "CD_UTENTE", "INDIRIZZO", "CIVICO", "LOCALITA",
                 "CAP", "PROVINCIA", "CD_PRODOTTO", "DS_PRODOTTO",
@@ -88,7 +105,7 @@ def generate_upload_gsped(pobs_path, masterfile_path, output_dir):
                 "CAMPO_LIBERO1", "CAMPO_LIBERO2", "CAMPO_LIBERO3", "CAMPO_LIBERO4",
                 "CAMPO_LIBERO5", "CAMPO_LIBERO6", "RAGIONE_SOCIALE", "EMAIL", "TELEFONO"
             ]
-            processing_log.append("[INFO] Using default template headers")
+            processing_log.append("[INFO] Using corrected default template headers")
 
         # Create new XLS workbook
         processing_log.append("[INFO] Creating output workbook...")
@@ -596,12 +613,29 @@ def generate_upload_gsped_realtime(pobs_path, masterfile_path, output_dir, sessi
         # Load template for headers
         realtime_logger.log(session_id, "Loading template headers...", "info")
         try:
-            template_wb = xlrd.open_workbook("Gsped_template_excel.xls")
-            template_sheet = template_wb.sheet_by_index(0)
-            headers = template_sheet.row_values(0)
-            realtime_logger.log(session_id, "Template headers loaded from file", "success")
+            # Try to find template file in multiple locations
+            template_paths = [
+                "Gsped_template_excel.xls",  # Current directory
+                "../Gsped_template_excel.xls",  # Parent directory
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "Gsped_template_excel.xls")  # Project root
+            ]
+
+            template_wb = None
+            for template_path in template_paths:
+                try:
+                    template_wb = xlrd.open_workbook(template_path)
+                    break
+                except FileNotFoundError:
+                    continue
+
+            if template_wb:
+                template_sheet = template_wb.sheet_by_index(0)
+                headers = template_sheet.row_values(0)
+                realtime_logger.log(session_id, "Template headers loaded from file", "success")
+            else:
+                raise FileNotFoundError("Template not found in any location")
         except FileNotFoundError:
-            # Default headers if template not found
+            # Default headers if template not found - Updated to match correct format
             headers = [
                 "CD_SOCIETA", "CD_DEPOSITO", "CD_UTENTE", "INDIRIZZO", "CIVICO", "LOCALITA",
                 "CAP", "PROVINCIA", "CD_PRODOTTO", "DS_PRODOTTO",
@@ -610,7 +644,7 @@ def generate_upload_gsped_realtime(pobs_path, masterfile_path, output_dir, sessi
                 "CAMPO_LIBERO1", "CAMPO_LIBERO2", "CAMPO_LIBERO3", "CAMPO_LIBERO4",
                 "CAMPO_LIBERO5", "CAMPO_LIBERO6", "RAGIONE_SOCIALE", "EMAIL", "TELEFONO"
             ]
-            realtime_logger.log(session_id, "Using default template headers", "info")
+            realtime_logger.log(session_id, "Using corrected default template headers", "info")
 
         # Create new XLS workbook
         realtime_logger.log(session_id, "Creating output workbook...", "info")
