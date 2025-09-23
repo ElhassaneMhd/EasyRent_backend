@@ -745,6 +745,7 @@ def update_imei_data_realtime(pobs_path, master_path, template_path, session_id=
             'message': result_message,
             'records_updated': updated_count,
             'download_file': output_filename,
+            'download_files': [output_filename],
             'processing_log': processing_log,
             'warnings': template_warnings
         }
@@ -863,10 +864,19 @@ def update_imei_data(pobs_path, master_path, template_path, output_dir, custom_n
 
         processing_log.append(f"[OK] Updated {aggiornati} records with IMEI data")
 
-        # Save updated POBS
+        # Save updated POBS file and create downloadable copy
         processing_log.append("[INFO] Saving updated POBS file...")
         wb.save(pobs_path)
-        processing_log.append("[OK] POBS file updated and saved")
+        processing_log.append("[OK] Original POBS file updated and saved")
+
+        # Create downloadable copy of updated POBS file
+        pobs_output_dir = os.path.join(output_dir, "POBS")
+        os.makedirs(pobs_output_dir, exist_ok=True)
+
+        pobs_updated_filename = f"{os.path.splitext(os.path.basename(pobs_path))[0]}_updated_with_IMEI_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        pobs_updated_path = os.path.join(pobs_output_dir, pobs_updated_filename)
+        wb.save(pobs_updated_path)
+        processing_log.append(f"[OK] Updated POBS file saved for download: {pobs_updated_filename}")
 
         # Generate IMEI HUB file if there are updated records
         imei_hub_path = None
@@ -951,18 +961,26 @@ def update_imei_data(pobs_path, master_path, template_path, output_dir, custom_n
 
         processing_log.append("[OK] POBS IMEI data update operation completed successfully")
 
-        result_message = f'Successfully updated {aggiornati} records and generated IMEI HUB file.'
+        result_message = f'Successfully updated {aggiornati} records. Generated updated POBS file and IMEI HUB file.'
         if template_warnings:
             result_message += f' {template_warnings[0]}'
+
+        # Prepare download files list
+        download_files = []
+        if aggiornati > 0:  # Only include updated POBS if records were actually updated
+            download_files.append(pobs_updated_filename)
+        if imei_hub_path:
+            download_files.append(os.path.basename(imei_hub_path))
 
         return {
             'success': True,
             'message': result_message,
             'records_updated': aggiornati,
             'backup_file': backup_filename,
+            'updated_pobs_file': pobs_updated_filename if aggiornati > 0 else None,
             'imei_hub_file': os.path.basename(imei_hub_path) if imei_hub_path else None,
             'updated_guids': aggiornati_id[:10],  # First 10 GUIDs
-            'download_files': [os.path.basename(imei_hub_path)] if imei_hub_path else [],
+            'download_files': download_files,
             'log_file': log_filename,
             'processing_log': processing_log,
             'warnings': template_warnings
