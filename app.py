@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
+from flask_jwt_extended import jwt_required
 import os
 import json
 import threading
@@ -10,6 +11,7 @@ from services.pcom_service import process_pcom_files, process_pcom_with_pobs, pr
 from services.tracking_service import generate_upload_gsped, update_tracking_data, generate_upload_gsped_realtime, update_tracking_data_realtime
 from services.logger_service import operation_logger
 from services.realtime_logger import realtime_logger
+from middleware.auth import init_auth, login
 
 app = Flask(__name__)
 CORS(app, origins=[
@@ -20,6 +22,9 @@ CORS(app, origins=[
     "http://127.0.0.1:3000"
 ])
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
+
+# Initialize JWT authentication
+jwt = init_auth(app)
 
 # Ensure directories exist
 os.makedirs('uploads', exist_ok=True)
@@ -35,10 +40,20 @@ def save_uploaded_file(file: FileStorage, folder: str) -> str:
     return None
 
 # ============================================================================
+# Authentication Routes
+# ============================================================================
+
+@app.route('/api/auth/login', methods=['POST'])
+def auth_login():
+    """Login endpoint"""
+    return login()
+
+# ============================================================================
 # POBS Module Routes
 # ============================================================================
 
 @app.route('/api/pobs/verify-new', methods=['POST'])
+@jwt_required()
 def pobs_verify_new():
     """Verify new records between Noleggio and POBS files"""
     try:
