@@ -75,6 +75,7 @@ def pobs_verify_new():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/pobs/add-new', methods=['POST'])
+@jwt_required()
 def pobs_add_new():
     """Add new records to POBS file"""
     try:
@@ -96,6 +97,7 @@ def pobs_add_new():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/pobs/update-imei', methods=['POST'])
+@jwt_required()
 def pobs_update_imei():
     """Update IMEI data from masterfile with custom naming"""
     try:
@@ -124,6 +126,7 @@ def pobs_update_imei():
 # ============================================================================
 
 @app.route('/api/pcom/process', methods=['POST'])
+@jwt_required()
 def pcom_process():
     """Process PCOM files with optional POBS update"""
     try:
@@ -164,6 +167,7 @@ def pcom_process():
 # ============================================================================
 
 @app.route('/api/tracking/generate-gsped', methods=['POST'])
+@jwt_required()
 def tracking_generate_gsped():
     """Generate Upload Gsped file"""
     try:
@@ -185,6 +189,7 @@ def tracking_generate_gsped():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/tracking/update-tracking', methods=['POST'])
+@jwt_required()
 def tracking_update():
     """Update tracking data in POBS with masterfile integration"""
     try:
@@ -213,6 +218,7 @@ def tracking_update():
 # ============================================================================
 
 @app.route('/api/download/<filename>')
+@jwt_required()
 def download_file(filename):
     """Download generated files with enhanced subdirectory search"""
     try:
@@ -250,6 +256,7 @@ def download_file(filename):
 # ============================================================================
 
 @app.route('/api/historic/files')
+@jwt_required()
 def get_historic_files():
     """Get all historic files organized by feature type"""
     try:
@@ -298,6 +305,7 @@ def get_historic_files():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/historic/preview/<filename>')
+@jwt_required()
 def preview_file(filename):
     """Preview file content (supports both small preview and expanded view)"""
     try:
@@ -368,6 +376,7 @@ def preview_file(filename):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/historic/delete/<filename>', methods=['DELETE'])
+@jwt_required()
 def delete_historic_file(filename):
     """Delete a historic file"""
     try:
@@ -406,6 +415,7 @@ def delete_historic_file(filename):
 # ============================================================================
 
 @app.route('/api/logs')
+@jwt_required()
 def get_operation_logs():
     """Get recent operation logs"""
     try:
@@ -422,6 +432,7 @@ def get_operation_logs():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/logs/<log_filename>')
+@jwt_required()
 def get_log_file(log_filename):
     """Download a specific log file"""
     try:
@@ -437,6 +448,7 @@ def get_log_file(log_filename):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/logs/cleanup', methods=['POST'])
+@jwt_required()
 def cleanup_logs():
     """Clean up old log files"""
     try:
@@ -456,6 +468,7 @@ def cleanup_logs():
 # ============================================================================
 
 @app.route('/api/logs/create-session', methods=['POST'])
+@jwt_required()
 def create_log_session():
     """Create a new real-time logging session"""
     try:
@@ -468,6 +481,7 @@ def create_log_session():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/logs/stream/<session_id>')
+@jwt_required()
 def stream_logs(session_id):
     """Stream logs for a specific session via Server-Sent Events"""
     try:
@@ -476,6 +490,7 @@ def stream_logs(session_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/logs/result/<session_id>')
+@jwt_required()
 def get_session_result(session_id):
     """Get the final result for a completed session"""
     try:
@@ -487,6 +502,7 @@ def get_session_result(session_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/logs/sessions', methods=['GET'])
+@jwt_required()
 def get_active_sessions():
     """Get list of active sessions"""
     try:
@@ -500,6 +516,7 @@ def get_active_sessions():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/logs/cleanup/<session_id>', methods=['DELETE'])
+@jwt_required()
 def cleanup_session(session_id):
     """Manually cleanup a specific session"""
     try:
@@ -512,6 +529,7 @@ def cleanup_session(session_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/logs/cleanup', methods=['DELETE'])
+@jwt_required()
 def cleanup_all_sessions():
     """Emergency cleanup of all sessions"""
     try:
@@ -533,6 +551,7 @@ def health_check():
     return jsonify({'status': 'healthy', 'service': 'EasyRent Backend'})
 
 @app.route('/api/debug/file-columns', methods=['POST'])
+@jwt_required()
 def debug_file_columns():
     """Debug endpoint to check file columns"""
     try:
