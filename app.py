@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, make_response
 from flask_cors import CORS
 from flask_jwt_extended import jwt_required
 import os
@@ -16,15 +16,28 @@ from middleware.auth import init_auth, login
 app = Flask(__name__)
 CORS(app, origins=[
     "https://easyrentwebapp.netlify.app",
+    "https://*.netlify.app",
     "http://localhost:3000",
     "http://localhost:1420",
     "http://tauri.localhost",
     "http://127.0.0.1:3000"
-])
+], supports_credentials=True, methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+   allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'])
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
 
 # Initialize JWT authentication
 jwt = init_auth(app)
+
+# Handle preflight requests
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        response = make_response()
+        response.headers.add("Access-Control-Allow-Origin", "*")
+        response.headers.add('Access-Control-Allow-Headers', "Content-Type,Authorization")
+        response.headers.add('Access-Control-Allow-Methods', "GET,PUT,POST,DELETE,OPTIONS")
+        response.headers.add('Access-Control-Allow-Credentials', "true")
+        return response
 
 # Ensure directories exist
 os.makedirs('uploads', exist_ok=True)
