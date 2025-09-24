@@ -240,10 +240,24 @@ def generate_file_chunks(file_path, chunk_size=8192):
             yield chunk
 
 @app.route('/api/download/<filename>')
-@jwt_required()
+@jwt_required(optional=True)
 def download_file(filename):
     """Download generated files with enhanced subdirectory search and streaming for large files"""
     try:
+        # Check authentication - either JWT header or token query param
+        from flask_jwt_extended import get_jwt_identity, decode_token
+
+        current_user = get_jwt_identity()
+        if not current_user:
+            # Try token from query parameter as fallback
+            token = request.args.get('token')
+            if token:
+                try:
+                    decode_token(token)
+                except Exception:
+                    return jsonify({'error': 'Invalid token'}), 401
+            else:
+                return jsonify({'error': 'Authentication required'}), 401
         # Define priority search order for subdirectories
         search_dirs = [
             'outputs',  # Direct outputs folder
