@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file, make_response
+from flask import Flask, request, jsonify, send_file, make_response, Response
 from flask_cors import CORS
 from flask_jwt_extended import jwt_required
 import os
@@ -22,7 +22,7 @@ CORS(app, origins=[
     "http://tauri.localhost",
     "http://127.0.0.1:3000"
 ], supports_credentials=True, methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-   allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'])
+   allow_headers=['Content-Type', 'Authorization', 'X-Requested-With', 'Accept-Ranges', 'Range'])
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
 
 # Initialize JWT authentication
@@ -34,7 +34,7 @@ def handle_preflight():
     if request.method == "OPTIONS":
         response = make_response()
         response.headers.add("Access-Control-Allow-Origin", "*")
-        response.headers.add('Access-Control-Allow-Headers', "Content-Type,Authorization")
+        response.headers.add('Access-Control-Allow-Headers', "Content-Type,Authorization,Accept-Ranges,Range")
         response.headers.add('Access-Control-Allow-Methods', "GET,PUT,POST,DELETE,OPTIONS")
         response.headers.add('Access-Control-Allow-Credentials', "true")
         return response
@@ -230,10 +230,19 @@ def tracking_update():
 # File Download Routes
 # ============================================================================
 
+def generate_file_chunks(file_path, chunk_size=8192):
+    """Generator function to stream file in chunks"""
+    with open(file_path, 'rb') as f:
+        while True:
+            chunk = f.read(chunk_size)
+            if not chunk:
+                break
+            yield chunk
+
 @app.route('/api/download/<filename>')
 @jwt_required()
 def download_file(filename):
-    """Download generated files with enhanced subdirectory search"""
+    """Download generated files with enhanced subdirectory search and streaming for large files"""
     try:
         # Define priority search order for subdirectories
         search_dirs = [
@@ -248,19 +257,199 @@ def download_file(filename):
             'outputs/backup_POBS'  # POBS backup files
         ]
 
+        file_path = None
+
         # First try priority directories
         for search_dir in search_dirs:
-            file_path = os.path.join(search_dir, filename)
-            if os.path.exists(file_path):
-                return send_file(file_path, as_attachment=True)
+            potential_path = os.path.join(search_dir, filename)
+            if os.path.exists(potential_path):
+                file_path = potential_path
+                break
 
         # If not found, do a comprehensive search in all subdirectories
-        for root, dirs, files in os.walk('outputs'):
-            if filename in files:
-                file_path = os.path.join(root, filename)
-                return send_file(file_path, as_attachment=True)
+        if not file_path:
+            for root, dirs, files in os.walk('outputs'):
+                if filename in files:
+                    file_path = os.path.join(root, filename)
+                    break
 
-        return jsonify({'error': f'File "{filename}" not found in any output directory'}), 404
+        if not file_path:
+            return jsonify({'error': f'File "{filename}" not found in any output directory'}), 404
+
+        # Check file size for optimization
+        file_size = os.path.getsize(file_path)
+
+        # For very large files (>10MB), use chunked streaming
+        if file_size > 10 * 1024 * 1024:  # 10MB
+            def generate():
+                with open(file_path, 'rb') as f:
+                    while True:
+                        chunk = f.read(8192)  # 8KB chunks
+                        if not chunk:
+                            break
+                        yield chunk
+
+            response = Response(
+                generate(),
+                headers={
+                    'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    'Content-Disposition': f'attachment; filename="{filename}"',
+                    'Content-Length': str(file_size),
+                    'Cache-Control': 'no-cache',
+                    'Connection': 'keep-alive'
+                }
+            )
+            return response
+        else:
+            # For smaller files, use send_file
+            return send_file(
+                file_path,
+                as_attachment=True,
+                download_name=filename
+            )
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/download-direct/<filename>')
+@jwt_required()
+def download_file_direct(filename):
+    """Alternative direct download with range request support for large files"""
+    try:
+        # Same file search logic
+        search_dirs = [
+            'outputs', 'outputs/PCOM', 'outputs/POBS', 'outputs/IMEI HUB',
+            'outputs/GSPED', 'outputs/TRACKING RADAR', 'outputs/POBS CON TRACKING',
+            'outputs/Backup', 'outputs/backup_POBS'
+        ]
+
+        file_path = None
+        for search_dir in search_dirs:
+            potential_path = os.path.join(search_dir, filename)
+            if os.path.exists(potential_path):
+                file_path = potential_path
+                break
+
+        if not file_path:
+            for root, dirs, files in os.walk('outputs'):
+                if filename in files:
+                    file_path = os.path.join(root, filename)
+                    break
+
+        if not file_path:
+            return jsonify({'error': f'File "{filename}" not found'}), 404
+
+        # Get file size
+        file_size = os.path.getsize(file_path)
+
+        # Check if client supports range requests
+        range_header = request.headers.get('Range')
+
+        if range_header:
+            # Parse range header
+            byte_start = 0
+            byte_end = file_size - 1
+
+            if range_header.startswith('bytes='):
+                range_match = range_header[6:].split('-')
+                if range_match[0]:
+                    byte_start = int(range_match[0])
+                if range_match[1]:
+                    byte_end = int(range_match[1])
+
+            content_length = byte_end - byte_start + 1
+
+            def generate_partial():
+                with open(file_path, 'rb') as f:
+                    f.seek(byte_start)
+                    remaining = content_length
+                    while remaining:
+                        chunk_size = min(8192, remaining)
+                        chunk = f.read(chunk_size)
+                        if not chunk:
+                            break
+                        remaining -= len(chunk)
+                        yield chunk
+
+            response = Response(
+                generate_partial(),
+                206,  # Partial Content
+                headers={
+                    'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    'Content-Range': f'bytes {byte_start}-{byte_end}/{file_size}',
+                    'Accept-Ranges': 'bytes',
+                    'Content-Length': str(content_length),
+                    'Content-Disposition': f'attachment; filename="{filename}"',
+                }
+            )
+            return response
+        else:
+            # No range request, send entire file with chunked encoding
+            def generate_full():
+                with open(file_path, 'rb') as f:
+                    while True:
+                        chunk = f.read(8192)
+                        if not chunk:
+                            break
+                        yield chunk
+
+            response = Response(
+                generate_full(),
+                headers={
+                    'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    'Content-Length': str(file_size),
+                    'Content-Disposition': f'attachment; filename="{filename}"',
+                    'Accept-Ranges': 'bytes',
+                    'Cache-Control': 'no-cache'
+                }
+            )
+            return response
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/download-simple/<filename>')
+def download_file_simple(filename):
+    """Simple download without JWT for emergency fallback (token in query param)"""
+    try:
+        # Get token from query parameter
+        token = request.args.get('token')
+        if not token:
+            return jsonify({'error': 'Token required'}), 401
+
+        # Validate token manually
+        from flask_jwt_extended import decode_token
+        try:
+            decode_token(token)
+        except Exception:
+            return jsonify({'error': 'Invalid token'}), 401
+
+        # Same file search logic
+        search_dirs = [
+            'outputs', 'outputs/PCOM', 'outputs/POBS', 'outputs/IMEI HUB',
+            'outputs/GSPED', 'outputs/TRACKING RADAR', 'outputs/POBS CON TRACKING',
+            'outputs/Backup', 'outputs/backup_POBS'
+        ]
+
+        file_path = None
+        for search_dir in search_dirs:
+            potential_path = os.path.join(search_dir, filename)
+            if os.path.exists(potential_path):
+                file_path = potential_path
+                break
+
+        if not file_path:
+            for root, dirs, files in os.walk('outputs'):
+                if filename in files:
+                    file_path = os.path.join(root, filename)
+                    break
+
+        if not file_path:
+            return jsonify({'error': f'File "{filename}" not found'}), 404
+
+        # Simple direct file send
+        return send_file(file_path, as_attachment=True, download_name=filename)
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
