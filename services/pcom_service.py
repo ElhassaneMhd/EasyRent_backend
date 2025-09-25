@@ -792,11 +792,16 @@ def process_pobs_update_realtime(pobs_path, noleggio_path, dest_folder, custom_n
 
         if nuovi.empty:
             log_message("[INFO] No new records found to add")
+            if excluded_count > 0:
+                message = f'No new records to add. All POBS IDs from Noleggio file already exist in POBS file. Found {excluded_count} records with Resolved-Rejected status that were excluded.'
+            else:
+                message = 'No new records to add. All POBS IDs from Noleggio file already exist in POBS file.'
             return {
                 'success': True,
                 'no_changes': True,
-                'message': 'No new records to add',
+                'message': message,
                 'records_added': 0,
+                'excluded_resolved_rejected_count': excluded_count,
                 'processing_log': processing_log
             }
 

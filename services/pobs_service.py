@@ -115,10 +115,15 @@ def verify_new_records(noleggio_path, pobs_path):
 
         if nuovi.empty:
             processing_log.append("[INFO] No new records found")
+            if excluded_count > 0:
+                message = f'No new POBS IDs to add. All POBS IDs from Noleggio file already exist in POBS file. Found {excluded_count} records with Resolved-Rejected status that were excluded.'
+            else:
+                message = 'No new POBS IDs to add. All POBS IDs from Noleggio file already exist in POBS file.'
             result = {
                 'success': True,
                 'new_records_count': 0,
-                'message': 'No new POBS IDs to add.',
+                'excluded_resolved_rejected_count': excluded_count,
+                'message': message,
                 'preview_data': [],
                 'processing_log': processing_log
             }
@@ -279,10 +284,15 @@ def verify_new_records_realtime(noleggio_path, pobs_path, session_id=None):
 
         if nuovi.empty:
             log_message("[INFO] No new records found")
+            if excluded_count > 0:
+                message = f'No new POBS IDs to add. All POBS IDs from Noleggio file already exist in POBS file. Found {excluded_count} records with Resolved-Rejected status that were excluded.'
+            else:
+                message = 'No new POBS IDs to add. All POBS IDs from Noleggio file already exist in POBS file.'
             result = {
                 'success': True,
                 'new_records_count': 0,
-                'message': 'No new POBS IDs to add.',
+                'excluded_resolved_rejected_count': excluded_count,
+                'message': message,
                 'preview_data': [],
                 'processing_log': processing_log
             }
@@ -418,10 +428,16 @@ def add_new_records_realtime(noleggio_path, pobs_path, session_id=None):
 
         if verification_result.get('new_records_count', 0) == 0:
             log_message("[INFO] No new records found to add")
+            excluded_count = verification_result.get('excluded_resolved_rejected_count', 0)
+            if excluded_count > 0:
+                message = f'No new records to add. All POBS IDs from Noleggio file already exist in POBS file. Found {excluded_count} records with Resolved-Rejected status that were excluded.'
+            else:
+                message = 'No new records to add. All POBS IDs from Noleggio file already exist in POBS file.'
             result = {
                 'success': True,
                 'no_changes': True,
-                'message': 'No new records to add',
+                'message': message,
+                'excluded_resolved_rejected_count': excluded_count,
                 'processing_log': processing_log
             }
             if session_id:
@@ -522,11 +538,17 @@ def add_new_records(noleggio_path, pobs_path, output_dir):
 
         if verification_result['new_records_count'] == 0:
             processing_log.append("[INFO] No new records found to add")
+            excluded_count = verification_result.get('excluded_resolved_rejected_count', 0)
+            if excluded_count > 0:
+                message = f'No new records found to add. All POBS IDs from Noleggio file already exist in POBS file. Found {excluded_count} records with Resolved-Rejected status that were excluded.'
+            else:
+                message = 'No new records found to add. All POBS IDs from Noleggio file already exist in POBS file.'
             return {
                 'success': True,
                 'no_changes': True,
-                'message': 'No new records found to add. All POBS IDs from Noleggio file already exist in POBS file.',
+                'message': message,
                 'records_added': 0,
+                'excluded_resolved_rejected_count': excluded_count,
                 'total_noleggio_records': len(pd.read_excel(noleggio_path, dtype=str)),
                 'total_pobs_records': len(pd.read_excel(pobs_path, dtype=str)),
                 'processing_log': processing_log
