@@ -14,6 +14,48 @@ from openpyxl import load_workbook
 from .logger_service import log_pcom_operation
 from .realtime_logger import realtime_logger
 
+def filter_resolved_rejected_status(df, log_function=None):
+    """
+    Filter out rows with Resolved-Rejected status in both Italian and English
+    Column names checked: STATO, STATUS, Stato, Status
+    Values filtered: Risolto-Rifiutato, Resolved-Rejected (case insensitive)
+    """
+    if df.empty:
+        return df, 0
+
+    original_count = len(df)
+
+    # Find status columns (both Italian and English)
+    status_columns = []
+    for col in df.columns:
+        if col.upper() in ['STATO', 'STATUS']:
+            status_columns.append(col)
+
+    if not status_columns:
+        if log_function:
+            log_function("[INFO] No STATUS/STATO column found - no filtering applied")
+        return df, 0
+
+    # Filter out resolved-rejected records for each status column found
+    filtered_df = df.copy()
+    excluded_values = ['risolto-rifiutato', 'resolved-rejected']
+
+    for status_col in status_columns:
+        # Create case-insensitive mask for filtering
+        mask = ~filtered_df[status_col].astype(str).str.strip().str.lower().isin(excluded_values)
+        filtered_df = filtered_df[mask]
+
+        if log_function:
+            log_function(f"[INFO] Applied status filter on column '{status_col}'")
+
+    filtered_count = len(filtered_df)
+    excluded_count = original_count - filtered_count
+
+    if log_function and excluded_count > 0:
+        log_function(f"[INFO] Excluded {excluded_count} records with 'Resolved-Rejected' / 'Risolto-Rifiutato' status")
+
+    return filtered_df, excluded_count
+
 def extract_memory(text: str):
     """Extract memory information from text"""
     if not isinstance(text, str):
@@ -564,6 +606,14 @@ def process_pcom_files_realtime(noleggio_path, soho_path, output_dir, modelli_pa
         noleggio_data = pd.read_excel(noleggio_path)
         log_message(f"Loaded {len(noleggio_data)} records from Noleggio file")
 
+        # Apply status filtering for PCOM processing
+        log_message("[INFO] Applying status filter to exclude 'Resolved-Rejected' / 'Risolto-Rifiutato' records")
+        noleggio_data, excluded_count = filter_resolved_rejected_status(noleggio_data, log_message)
+        if excluded_count > 0:
+            log_message(f"[INFO] After filtering: {len(noleggio_data)} records remaining (excluded {excluded_count} resolved-rejected records)")
+        else:
+            log_message("[INFO] No records excluded by status filter")
+
         log_message(f"Loading SOHO file: {os.path.basename(soho_path)}")
         soho_data = pd.read_excel(soho_path)
         log_message(f"Loaded {len(soho_data)} records from SOHO file")
@@ -704,6 +754,14 @@ def process_pobs_update_realtime(pobs_path, noleggio_path, dest_folder, custom_n
         log_message(f"[INFO] Reading Noleggio file: {os.path.basename(noleggio_path)}")
         df_noleggio = pd.read_excel(noleggio_path, dtype=str)
         log_message(f"[OK] Loaded {len(df_noleggio)} records from Noleggio file")
+
+        # Apply status filtering for PCOM with POBS processing
+        log_message("[INFO] Applying status filter to exclude 'Resolved-Rejected' / 'Risolto-Rifiutato' records")
+        df_noleggio, excluded_count = filter_resolved_rejected_status(df_noleggio, log_message)
+        if excluded_count > 0:
+            log_message(f"[INFO] After filtering: {len(df_noleggio)} records remaining (excluded {excluded_count} resolved-rejected records)")
+        else:
+            log_message("[INFO] No records excluded by status filter")
 
         # Find new records
         chiave = "POBS ID"
