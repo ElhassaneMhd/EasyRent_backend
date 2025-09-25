@@ -78,7 +78,9 @@ def generate_upload_gsped(pobs_path, masterfile_path, output_dir):
             template_paths = [
                 "Gsped_template_excel.xls",  # Current directory
                 "../Gsped_template_excel.xls",  # Parent directory
-                os.path.join(os.path.dirname(os.path.dirname(__file__)), "Gsped_template_excel.xls")  # Project root
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "Gsped_template_excel.xls"),  # Project root
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "new", "3.Tracking Manager", "Files", "Gsped_template_excel.xls"),  # Template location
+                r"C:\Users\acer\Desktop\p\EasyRent\new\3.Tracking Manager\Files\Gsped_template_excel.xls"  # Absolute path
             ]
 
             template_wb = None
@@ -96,16 +98,15 @@ def generate_upload_gsped(pobs_path, masterfile_path, output_dir):
             else:
                 raise FileNotFoundError("Template not found in any location")
         except FileNotFoundError:
-            # Default headers if template not found - Updated to match correct format
+            # Default headers if template not found - Updated to match correct GSPED format
             headers = [
-                "CD_SOCIETA", "CD_DEPOSITO", "CD_UTENTE", "INDIRIZZO", "CIVICO", "LOCALITA",
-                "CAP", "PROVINCIA", "CD_PRODOTTO", "DS_PRODOTTO",
-                "QT_ORDINATA", "QT_EVASA", "QT_DA_EVADERE", "QT_SPEDITA", "FG_SPEDIRE",
-                "NOTE1", "NOTE2", "RIFERIMENTO_ESTERNO",
-                "CAMPO_LIBERO1", "CAMPO_LIBERO2", "CAMPO_LIBERO3", "CAMPO_LIBERO4",
-                "CAMPO_LIBERO5", "CAMPO_LIBERO6", "RAGIONE_SOCIALE", "EMAIL", "TELEFONO"
+                "cod_cliente", "cod_destinatario", "Destinatario", "Indirizzo", "CAP", "Località",
+                "Provincia", "Persona di riferimento", "Telefono", "email destinatario", "corriere",
+                "tipo spedizione", "Data consegna tassativa", "Colli", "Peso", "Volume mc",
+                "Riferimento cliente (DDT)", "rif_interno_cliente", "contrassegno", "tipo incasso",
+                "valore assicurazione", "preavv_phone", "note", "paese", "merce", "valore doganale", "origine"
             ]
-            processing_log.append("[INFO] Using corrected default template headers")
+            processing_log.append("[INFO] Using corrected default GSPED template headers")
 
         # Create new XLS workbook
         processing_log.append("[INFO] Creating output workbook...")
@@ -131,35 +132,35 @@ def generate_upload_gsped(pobs_path, masterfile_path, output_dir):
             if guid and str(guid).strip() in master_guids:
                 if processed_count % 50 == 0 and processed_count > 0:
                     processing_log.append(f"[INFO] Processed {processed_count} matching records...")
-                # Map POBS data to Gsped format (same mapping as original)
+                # Map POBS data to corrected GSPED format
                 mapped_row = [
-                    "392369",           # CD_SOCIETA
-                    "",                 # CD_DEPOSITO
-                    row[11] if len(row) > 11 else "",  # CD_UTENTE (col L)
-                    row[13] if len(row) > 13 else "",  # INDIRIZZO (col N)
-                    row[15] if len(row) > 15 else "",  # CIVICO (col P)
-                    row[14] if len(row) > 14 else "",  # LOCALITA (col O)
+                    "392369",           # cod_cliente
+                    "",                 # cod_destinatario
+                    row[11] if len(row) > 11 else "",  # Destinatario (col L)
+                    row[13] if len(row) > 13 else "",  # Indirizzo (col N)
                     row[16] if len(row) > 16 else "",  # CAP (col Q)
-                    row[17] if len(row) > 17 else "",  # PROVINCIA (col R)
-                    row[20] if len(row) > 20 else "",  # CD_PRODOTTO (col U)
-                    row[19] if len(row) > 19 else "",  # DS_PRODOTTO (col T)
-                    "2",                # QT_ORDINATA
-                    "0",                # QT_EVASA
-                    "0",                # QT_DA_EVADERE
-                    "1",                # QT_SPEDITA
-                    "1",                # FG_SPEDIRE
-                    "",                 # NOTE1
-                    "",                 # NOTE2
-                    row[6] if len(row) > 6 else "",    # RIFERIMENTO_ESTERNO (col G)
-                    "",                 # CAMPO_LIBERO1
-                    "",                 # CAMPO_LIBERO2
-                    "",                 # CAMPO_LIBERO3
-                    "",                 # CAMPO_LIBERO4
-                    "",                 # CAMPO_LIBERO5
-                    "",                 # CAMPO_LIBERO6
-                    "VODAFONE EASYRENT", # RAGIONE_SOCIALE
-                    "",                 # EMAIL
-                    ""                  # TELEFONO
+                    row[14] if len(row) > 14 else "",  # Località (col O)
+                    row[17] if len(row) > 17 else "",  # Provincia (col R)
+                    "",                 # Persona di riferimento
+                    "",                 # Telefono
+                    "",                 # email destinatario
+                    "GSPED",            # corriere
+                    "Standard",         # tipo spedizione
+                    "",                 # Data consegna tassativa
+                    "1",                # Colli
+                    "1.0",              # Peso
+                    "0.001",            # Volume mc
+                    row[6] if len(row) > 6 else "",    # Riferimento cliente (DDT) (col G)
+                    "",                 # rif_interno_cliente
+                    "0",                # contrassegno
+                    "",                 # tipo incasso
+                    "0",                # valore assicurazione
+                    "",                 # preavv_phone
+                    "",                 # note
+                    "IT",               # paese
+                    row[19] if len(row) > 19 else "",  # merce (col T - product description)
+                    "0",                # valore doganale
+                    "IT"                # origine
                 ]
 
                 # Convert None values to empty strings and strip
@@ -617,7 +618,9 @@ def generate_upload_gsped_realtime(pobs_path, masterfile_path, output_dir, sessi
             template_paths = [
                 "Gsped_template_excel.xls",  # Current directory
                 "../Gsped_template_excel.xls",  # Parent directory
-                os.path.join(os.path.dirname(os.path.dirname(__file__)), "Gsped_template_excel.xls")  # Project root
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "Gsped_template_excel.xls"),  # Project root
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "new", "3.Tracking Manager", "Files", "Gsped_template_excel.xls"),  # Template location
+                r"C:\Users\acer\Desktop\p\EasyRent\new\3.Tracking Manager\Files\Gsped_template_excel.xls"  # Absolute path
             ]
 
             template_wb = None
@@ -635,16 +638,15 @@ def generate_upload_gsped_realtime(pobs_path, masterfile_path, output_dir, sessi
             else:
                 raise FileNotFoundError("Template not found in any location")
         except FileNotFoundError:
-            # Default headers if template not found - Updated to match correct format
+            # Default headers if template not found - Updated to match correct GSPED format
             headers = [
-                "CD_SOCIETA", "CD_DEPOSITO", "CD_UTENTE", "INDIRIZZO", "CIVICO", "LOCALITA",
-                "CAP", "PROVINCIA", "CD_PRODOTTO", "DS_PRODOTTO",
-                "QT_ORDINATA", "QT_EVASA", "QT_DA_EVADERE", "QT_SPEDITA", "FG_SPEDIRE",
-                "NOTE1", "NOTE2", "RIFERIMENTO_ESTERNO",
-                "CAMPO_LIBERO1", "CAMPO_LIBERO2", "CAMPO_LIBERO3", "CAMPO_LIBERO4",
-                "CAMPO_LIBERO5", "CAMPO_LIBERO6", "RAGIONE_SOCIALE", "EMAIL", "TELEFONO"
+                "cod_cliente", "cod_destinatario", "Destinatario", "Indirizzo", "CAP", "Località",
+                "Provincia", "Persona di riferimento", "Telefono", "email destinatario", "corriere",
+                "tipo spedizione", "Data consegna tassativa", "Colli", "Peso", "Volume mc",
+                "Riferimento cliente (DDT)", "rif_interno_cliente", "contrassegno", "tipo incasso",
+                "valore assicurazione", "preavv_phone", "note", "paese", "merce", "valore doganale", "origine"
             ]
-            realtime_logger.log(session_id, "Using corrected default template headers", "info")
+            realtime_logger.log(session_id, "Using corrected default GSPED template headers", "info")
 
         # Create new XLS workbook
         realtime_logger.log(session_id, "Creating output workbook...", "info")
@@ -670,35 +672,35 @@ def generate_upload_gsped_realtime(pobs_path, masterfile_path, output_dir, sessi
             if guid and str(guid).strip() in master_guids:
                 if processed_count % 50 == 0 and processed_count > 0:
                     realtime_logger.log(session_id, f"Processed {processed_count} matching records...", "info")
-                # Map POBS data to Gsped format (same mapping as original)
+                # Map POBS data to corrected GSPED format
                 mapped_row = [
-                    "392369",           # CD_SOCIETA
-                    "",                 # CD_DEPOSITO
-                    row[11] if len(row) > 11 else "",  # CD_UTENTE (col L)
-                    row[13] if len(row) > 13 else "",  # INDIRIZZO (col N)
-                    row[15] if len(row) > 15 else "",  # CIVICO (col P)
-                    row[14] if len(row) > 14 else "",  # LOCALITA (col O)
+                    "392369",           # cod_cliente
+                    "",                 # cod_destinatario
+                    row[11] if len(row) > 11 else "",  # Destinatario (col L)
+                    row[13] if len(row) > 13 else "",  # Indirizzo (col N)
                     row[16] if len(row) > 16 else "",  # CAP (col Q)
-                    row[17] if len(row) > 17 else "",  # PROVINCIA (col R)
-                    row[20] if len(row) > 20 else "",  # CD_PRODOTTO (col U)
-                    row[19] if len(row) > 19 else "",  # DS_PRODOTTO (col T)
-                    "2",                # QT_ORDINATA
-                    "0",                # QT_EVASA
-                    "0",                # QT_DA_EVADERE
-                    "1",                # QT_SPEDITA
-                    "1",                # FG_SPEDIRE
-                    "",                 # NOTE1
-                    "",                 # NOTE2
-                    row[6] if len(row) > 6 else "",    # RIFERIMENTO_ESTERNO (col G)
-                    "",                 # CAMPO_LIBERO1
-                    "",                 # CAMPO_LIBERO2
-                    "",                 # CAMPO_LIBERO3
-                    "",                 # CAMPO_LIBERO4
-                    "",                 # CAMPO_LIBERO5
-                    "",                 # CAMPO_LIBERO6
-                    "VODAFONE EASYRENT", # RAGIONE_SOCIALE
-                    "",                 # EMAIL
-                    ""                  # TELEFONO
+                    row[14] if len(row) > 14 else "",  # Località (col O)
+                    row[17] if len(row) > 17 else "",  # Provincia (col R)
+                    "",                 # Persona di riferimento
+                    "",                 # Telefono
+                    "",                 # email destinatario
+                    "GSPED",            # corriere
+                    "Standard",         # tipo spedizione
+                    "",                 # Data consegna tassativa
+                    "1",                # Colli
+                    "1.0",              # Peso
+                    "0.001",            # Volume mc
+                    row[6] if len(row) > 6 else "",    # Riferimento cliente (DDT) (col G)
+                    "",                 # rif_interno_cliente
+                    "0",                # contrassegno
+                    "",                 # tipo incasso
+                    "0",                # valore assicurazione
+                    "",                 # preavv_phone
+                    "",                 # note
+                    "IT",               # paese
+                    row[19] if len(row) > 19 else "",  # merce (col T - product description)
+                    "0",                # valore doganale
+                    "IT"                # origine
                 ]
 
                 # Convert None values to empty strings and strip
